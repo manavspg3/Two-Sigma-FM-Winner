@@ -19,7 +19,8 @@ from operator import itemgetter
 localrun = False
 usepublic = False
 vmode = False
-all_features = False # use w/vmode for feature selection.  run twice, cutting # of rounds to peak round
+all_features = False 
+# use w/vmode for feature selection.  run twice, cutting # of rounds to peak round
 
 def r_score(y_true, y_pred, sample_weight=None, multioutput=None):
     r2 = r2_score(y_true, y_pred, sample_weight=sample_weight,
@@ -32,22 +33,18 @@ def r_score(y_true, y_pred, sample_weight=None, multioutput=None):
 
 # From the xgboost script (along with the param settings)
     
-# Function XGBOOST ########################################################
+# Function XGBoost ########################################################
 def xgb_obj_custom_r(y_pred, dtrain):
     y_true = dtrain.get_label()
     y_mean = np.mean(y_true)
     y_median = np.median(y_true)
-    c1 = y_true
-    #c1 = y_true - y_mean
-    #c1 = y_true - y_median
+    c1 = y_true - y_mean + 3*y_median - 2*y_mode
     grad = 2*(y_pred-y_true)/(c1**2)
     hess = 2/(c1**2)
     return grad, hess
 
 def xgb_eval_custom_r(y_pred, dtrain):
-    #y_pred = np.clip(y_pred, -0.0755, .0755)
-#    y_pred[y_pred > .075] = .075
-#    y_pred[y_pred < -.075] = -.075
+    y_pred = np.clip(y_pred, -0.0755, .0755)
     y_true = dtrain.get_label()
     ybar = np.sum(y_true)/len(y_true)
     ssres = np.sum((y_true - y_pred) ** 2)
@@ -59,7 +56,6 @@ def xgb_eval_custom_r(y_pred, dtrain):
 env = kagglegym.make()
 o = env.reset()
 
-#excl = [env.ID_COL_NAME, env.SAMPLE_COL_NAME, env.TARGET_COL_NAME, env.TIME_COL_NAME]
 excl = ['id', 'sample', 'y', 'timestamp']
 basecols = [c for c in o.train.columns if c not in excl]
 
@@ -198,8 +194,8 @@ yptrain = DataPrep(keepinput=True, cols=backy_fset).run(train)
 yptrain.sort_values(['id', 'timestamp'], inplace=True)
 
 ypmodel = LinearRegression(n_jobs=-1)
-low_y_cut = -0.0725
-high_y_cut = 0.075
+low_y_cut = -0.0725453
+high_y_cut = 0.075453
 
 mask = np.logical_and(yptrain.y > low_y_cut, yptrain.y < high_y_cut)
 for f in backy_fset:
@@ -250,7 +246,6 @@ cols_to_use = [c for c in rcol if c in xtrain.columns and c in rcol_orig]
 # Convert to XGB format
 to_drop = ['timestamp', 'y']
 xtrain = xtrain[np.abs(xtrain['y']) < 0.018976588919758796678543568765]
-#xtrain = xtrain[np.abs(xtrain['y']) < 0.0150977]
 train_xgb = xgb.DMatrix(data=xtrain[cols_to_use],
                         label=xtrain['y'])
 
@@ -258,11 +253,11 @@ train_xgb = xgb.DMatrix(data=xtrain[cols_to_use],
 
 # determined by using testing w/public set that this matches public_xgb better.
 # higher values make it end sooner.
-#xvalid = xvalid[np.abs(xvalid['y']) > 0.0095]
+xvalid = xvalid[np.abs(xvalid['y']) > 0.00954532]
 valid_xgb = xgb.DMatrix(data=xvalid[cols_to_use],
                         label=xvalid['y'])
 
-#del xvalid
+del xvalid
 
 evallist = [(train_xgb, 'train'), (valid_xgb, 'valid')]
 
@@ -278,11 +273,11 @@ params = {
     ,'eta': 0.08
     ,'max_depth': 3
     , 'subsample': 0.9
-    #, 'colsample_bytree': 1
+    , 'colsample_bytree': 1
     ,'min_child_weight': 2**11
-    #,'gamma': 100
+    ,'gamma': 100
     , 'seed': 10
-    #, 'base_score': 0
+    , 'base_score': -1
 }
 
 
@@ -317,8 +312,8 @@ def prep_linear(df, c = lin_features):
     
     return m2mat
 
-low_y_cut = -0.07523
-high_y_cut = 0.07523
+low_y_cut = -0.07523456
+high_y_cut = 0.07523456
 traincut = train[np.logical_and(train.y > low_y_cut, train.y < high_y_cut)][['y'] + lin_features].copy().fillna(d_mean)
 
 model2 = LinearRegression(n_jobs=-1)
@@ -363,11 +358,11 @@ razz_params = {
     ,'eta': 0.04
     ,'max_depth': 3
     , 'subsample': 0.9
-    #, 'colsample_bytree': 1
+    , 'colsample_bytree': 1
     ,'min_child_weight': 2**11
-    #,'gamma': 100
+    ,'gamma': 100
     , 'seed': 10
-    #, 'base_score': 0
+    , 'base_score': -1
 }
 
 frazz = ['Dtechnical_20', 'technical_43_prev']
@@ -428,7 +423,7 @@ while True:
         print("Timestamp #{0} {1}".format(timestamp, time.time() - start))
         start = time.time()
 
-    # We perform a "step" by making our prediction and getting back an updated "observation":
+    # Perform a "step" by making our prediction and getting back an updated "observation":
     o, reward, done, info = env.step(target)
     if done:
         print("Public score: {}".format(info["public_score"]))
