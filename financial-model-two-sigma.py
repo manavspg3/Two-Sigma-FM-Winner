@@ -91,12 +91,49 @@ def get_basecols(rcol):
 
     return [k for k in duse.keys()]
 
+def reduce_mem_usage(df):
+    """ iterate through all the columns of a dataframe and modify the data type
+        to reduce memory usage.        
+    """
+    start_mem = df.memory_usage().sum() / 1024**2
+    print('Memory usage of dataframe is {:.2f} MB'.format(start_mem))
+    
+    for col in df.columns:
+        col_type = df[col].dtype
+        
+        if col_type != object:
+            c_min = df[col].min()
+            c_max = df[col].max()
+            if str(col_type)[:3] == 'int':
+                if c_min > np.iinfo(np.int8).min and c_max < np.iinfo(np.int8).max:
+                    df[col] = df[col].astype(np.int8)                
+                elif c_min > np.iinfo(np.int16).min and c_max < np.iinfo(np.int16).max:
+                    df[col] = df[col].astype(np.int16)
+                elif c_min > np.iinfo(np.int32).min and c_max < np.iinfo(np.int32).max:
+                    df[col] = df[col].astype(np.int32)
+                elif c_min > np.iinfo(np.int64).min and c_max < np.iinfo(np.int64).max:
+                    df[col] = df[col].astype(np.int64)  
+            else:
+                if c_min > np.finfo(np.float16).min and c_max < np.finfo(np.float16).max:
+                    df[col] = df[col].astype(np.float16)
+                elif c_min > np.finfo(np.float32).min and c_max < np.finfo(np.float32).max:
+                    df[col] = df[col].astype(np.float32)
+                else:
+                    df[col] = df[col].astype(np.float64)
+        else:
+            df[col] = df[col].astype('category')
+
+    end_mem = df.memory_usage().sum() / 1024**2
+    print('Memory usage after optimization is: {:.2f} MB'.format(end_mem))
+    print('Decreased by {:.1f}%'.format(100 * (start_mem - end_mem) / start_mem))
+
 basecols_touse = get_basecols(rcol)
 
 if vmode:
     train = pd.read_hdf('../input/train.h5')
 else:
     train = o.train.copy()
+train = reduce_mem_usage(train)
 
 d_mean = o.train[basecols_touse].median(axis=0)
 for c in basecols_touse:
@@ -189,8 +226,6 @@ class DataPrep:
 
 yptrain = DataPrep(keepinput=True, cols=backy_fset).run(train)
 
-#yptrain_prep = tmp.run(yptrain)
-
 yptrain.sort_values(['id', 'timestamp'], inplace=True)
 
 ypmodel = LinearRegression(n_jobs=-1)
@@ -205,10 +240,6 @@ yptraina = yptrain[mask]
 ypmodel.fit(yptraina[backy_fset].values.reshape(-1,len(backy_fset)), yptraina.y_prev.fillna(0))
 
 print(len(yptraina), ypmodel.coef_, ypmodel.intercept_)
-
-#630210 [  4.94327753  10.22880098  -4.53049511  -9.34886941   8.94329596
-#  -9.83007277] -2.68988841901e-05
-
 
 d_mean['y'] = 0
 
